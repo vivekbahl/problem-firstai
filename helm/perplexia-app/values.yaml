@@ -1,0 +1,11 @@
+appName: perplexia-ai
+namespace: default
+configmap:
+  name: perplexia-config
+  data:
+    ENVIRONMENT: development
+
+image:
+  name: perplexia-ai
+  repository: youracr.azurecr.io/
+  tag: latest

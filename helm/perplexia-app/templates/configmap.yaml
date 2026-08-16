@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configmap.name}}
+  namespace: {{ .Values.namespace }}
+data:
+  # Copy-paste the key-value pairs from your local .env file here
+
+  AZURE_STORAGE_ACCOUNT: "your-storage-name"
+  ENVIRONMENT: "{{ .Values.configmap.data.ENVIRONMENT }}"
+  OPENAI_API_KEY: "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"
+  ARIZE_SPACE_ID: "U3BhY2U6MjYzOjFLNWc="
+  ARIZE_API_KEY: "ak-367e305a-8337-4cea-a160-d661c361b983-If8odxqAWIsLRtfurpLuWITvO2TXV2s_"
+  ARIZE_COLLECTOR_ENDPOINT: "https://otlp.ca-central-1a.arize.com"

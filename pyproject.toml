@@ -1,0 +1,50 @@
+[project]
+name = "problem-first-ai"
+version = "0.1.0"
+description = "Problem First AI course materials — LangGraph curriculum environment"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    # Core — notebooks, LangGraph apps, and shared tooling
+    "ipykernel==7.1.0",
+    "jupyter==1.1.1",
+    "langchain==1.3.11",
+    "langgraph==1.2.8",
+    "langgraph-prebuilt==1.1.0",
+    "langchain-openai==1.3.3",
+    "python-dotenv==1.2.1",
+    "gradio==6.3.0",
+    # Shared tracing (Week 1–4)
+    "arize-otel==0.11.0",
+    "opentelemetry-sdk==1.39.1",
+    "openinference-instrumentation-langchain==0.1.58",
+    # Week 3 — Agentic RAG, PDF loading, Tavily search, Arize experiments
+    "langchain-tavily==0.2.18",
+    "pypdf==6.7.0",
+    "arize-phoenix-client==1.28.1",
+    "arize-phoenix-evals==2.9.0",
+    "arize==8.2.0",
+    "langchain-community==0.4.1",
+    "langchain-chroma==1.1.0",
+    # Week 4 — MCP tools and Deep Agents
+    "fastmcp==3.0.1",
+    "langchain-mcp-adapters==0.2.1",
+    "deepagents==0.4.1",
+    "tavily-python==0.7.26",
+    "arize-phoenix>=12.35.0",
+    "openai>=2.45.0",
+    "opentelemetry-api>=1.39.1",
+    "python-dateutil>=2.9.0.post0",
+]
+
+[tool.uv]
+package = false
+constraint-dependencies = [
+    # Keep the macOS 13 Apple Silicon wheel in the locked platform matrix.
+    "onnxruntime==1.23.2",
+]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'win32'",
+    "sys_platform == 'linux'",
+]

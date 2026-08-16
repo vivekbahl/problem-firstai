@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.appName }}
+    
+spec:
+  replicas: 1 # Adjust based on load (1 for Minikube, higher for production AKS)
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.name }}:{{ .Values.image.tag }}" # For AKS, replace with: youracr.azurecr.io/perplexia-ai:latest
+        imagePullPolicy: IfNotPresent # Allows Minikube to use your local image
+        
+        ports:
+        - containerPort: 8000
+          name: http-port
+          
+        # 🎯 PASSING YOUR ARGUMENTS HERE
+        # This replaces your command-line flags
+        args:
+        - "--mode"
+        - "part2memory"
+        - "--assignment"
+        - "2"
+
+        # 🔐 PASSING THE ENVIRONMENT FILE (.env)
+        # Instead of --env-file, Kubernetes reads variables from a ConfigMap or Secret
+        envFrom:
+        - configMapRef:
+            name: {{ .Values.configmap.name}}
+
+        resources:
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: "500m"
+            memory: 512Mi
