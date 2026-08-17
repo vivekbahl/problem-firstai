@@ -10,13 +10,40 @@ This implementation focuses on:
 from typing import Dict, List, Optional, TypedDict, Any
 from langgraph.graph import START, END, StateGraph
 from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, ToolMessage
+from langchain_core.tools import tool
 
 from perplexia_ai.core.tracing_arize import ArizeLangChainTracer
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from perplexia_ai.core.chat_interface import ChatInterface
 from perplexia_ai.tools.calculator import Calculator
 from perplexia_ai.tools.datetime_tool import DateTimeTool
+
+
+@tool
+def calculate(expression: str) -> str:
+    """Evaluate an arithmetic expression, including percentages (e.g. "120 * 15%").
+
+    Args:
+        expression: A math expression using digits, +, -, *, /, %, and parentheses.
+    """
+    return str(Calculator().evaluate_expression_percentage(expression))
+
+
+@tool
+def get_current_datetime() -> str:
+    """Get the current date and time."""
+    return DateTimeTool.get_current_datetime()
+
+
+@tool
+def get_day_of_week(date_str: str) -> str:
+    """Get the day of the week for a given calendar date.
+
+    Args:
+        date_str: A date as text, e.g. "January 17, 2026" or "2026-01-17".
+    """
+    return DateTimeTool.get_day_of_week(date_str)
 
 
 class QueryState(TypedDict, total=False):
@@ -34,8 +61,8 @@ class BasicToolsMemoryChat(ChatInterface):
         self.llm = None
         self.query_classifier_prompt = None
         self.response_prompts = {}
-        self.calculator = Calculator()
-        self.datetime_tool = DateTimeTool()
+        #self.calculator = Calculator()
+        #self.datetime_tool = DateTimeTool()
         self.graph = None
         self.memory = InMemorySaver()  # Added memory saver
         self.thread_id = "default_thread"  # Default thread ID
@@ -54,6 +81,11 @@ class BasicToolsMemoryChat(ChatInterface):
         tracer.setup_instrumentation()
                 
         self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.1)
+
+        # Tools bound so the model can decide when/how to call them, with structured args
+        self.tools = [calculate, get_current_datetime, get_day_of_week]
+        self.tools_by_name = {t.name: t for t in self.tools}
+        self.llm_with_tools = self.llm.bind_tools(self.tools)
         
         # Enhanced query classifier prompt with memory awareness
         self.query_classifier_prompt = (
@@ -81,8 +113,7 @@ class BasicToolsMemoryChat(ChatInterface):
         # Build the LangGraph with memory support
         graph_builder = StateGraph(QueryState)
         graph_builder.add_node("classify", self._classify_node)
-        graph_builder.add_node("calculator", self._calculate_node)
-        graph_builder.add_node("datetime", self._datetime_node)
+        graph_builder.add_node("tool_call", self._tool_call_node)
         graph_builder.add_node("respond", self._respond_node)
         graph_builder.add_node("context_manager", self._context_manager_node)  # Added context management
         
@@ -92,14 +123,13 @@ class BasicToolsMemoryChat(ChatInterface):
             "classify",
             self._route_decision,  # Use function-based routing for better handling
             {
-                "calculation": "calculator", 
-                "datetime": "datetime", 
+                "calculation": "tool_call", 
+                "datetime": "tool_call", 
                 "respond": "respond",
                 "follow_up": "respond"  # Follow-ups go to respond
             },
         )
-        graph_builder.add_edge("calculator", END)
-        graph_builder.add_edge("datetime", END)
+        graph_builder.add_edge("tool_call", END)
         graph_builder.add_edge("respond", END)
         
         # Compile with memory checkpointing
@@ -115,7 +145,7 @@ class BasicToolsMemoryChat(ChatInterface):
         state["messages"].append({
             "role": "user",
             "content": state["message"],
-            "timestamp": self.datetime_tool.get_current_datetime()
+            "timestamp": DateTimeTool.get_current_datetime()
         })
         
         # Keep only last 10 messages to manage token usage (adjust as needed)
@@ -185,6 +215,41 @@ class BasicToolsMemoryChat(ChatInterface):
         }
         return route_map.get(query_type, "respond")
 
+    def _tool_call_node(self, state: QueryState) -> Dict[str, str]:
+        """Let the LLM pick and call the calculator/datetime tools via bind_tools, then respond."""
+        context = self._extract_context(state.get("messages", []))
+        messages = [
+            SystemMessage(content=(
+                "You have access to tools for arithmetic calculations and date/time "
+                "questions. Call the appropriate tool to answer the user's request."
+            )),
+            HumanMessage(content=f"Previous context: {context}\nRequest: {state['message']}"),
+        ]
+
+        ai_message = self.llm_with_tools.invoke(messages)
+
+        tool_messages = []
+        for tool_call in ai_message.tool_calls:
+            tool_fn = self.tools_by_name[tool_call["name"]]
+            result = tool_fn.invoke(tool_call["args"])
+            tool_messages.append(ToolMessage(content=str(result), tool_call_id=tool_call["id"]))
+
+        if tool_messages:
+            final_response = self.llm_with_tools.invoke(messages + [ai_message] + tool_messages)
+            response_content = final_response.content
+        else:
+            # Model chose not to call a tool; fall back to its direct answer.
+            response_content = ai_message.content
+
+        if "messages" in state:
+            state["messages"].append({
+                "role": "assistant",
+                "content": response_content,
+                "timestamp": DateTimeTool.get_current_datetime()
+            })
+
+        return {"response": response_content, "messages": state.get("messages", [])}
+
     def _respond_node(self, state: QueryState) -> Dict[str, str]:
         """Generate the final response based on the classified query type with context."""
         query_type = state.get("query_type", "factual")
@@ -211,65 +276,7 @@ class BasicToolsMemoryChat(ChatInterface):
             state["messages"].append({
                 "role": "assistant",
                 "content": response_content,
-                "timestamp": self.datetime_tool.get_current_datetime()
-            })
-        
-        return {"response": response_content, "messages": state.get("messages", [])}
-
-    def _calculate_node(self, state: QueryState) -> Dict[str, str]:
-        """Extract the arithmetic expression from the message and evaluate it with memory support."""
-        # Add context for calculations (e.g., previous numbers discussed)
-        context = self._extract_context(state.get("messages", []))
-        
-        extraction_prompt = (
-            "Extract only the arithmetic expression (digits, +, -, *, /, %, parentheses) "
-            "needed to answer this request. Consider previous context if the request references "
-            "earlier numbers. Respond with only the expression, no words or units.\n"
-            f"Previous context: {context}\n"
-            f"Request: {state['message']}"
-        )
-        expression = self.llm.invoke(extraction_prompt).content.strip()
-        result = self.calculator.evaluate_expression_percentage(expression)
-        response_content = f"The result of {expression} is {result}."
-        
-        # Add to messages
-        if "messages" in state:
-            state["messages"].append({
-                "role": "assistant",
-                "content": response_content,
-                "timestamp": self.datetime_tool.get_current_datetime()
-            })
-        
-        return {"response": response_content, "messages": state.get("messages", [])}
-
-    def _datetime_node(self, state: QueryState) -> Dict[str, str]:
-        """Answer a date/time request using the DateTimeTool with memory support."""
-        context = self._extract_context(state.get("messages", []))
-        
-        extraction_prompt = (
-            "Does this request reference a specific calendar date (e.g. 'January 17, 2026', "
-            "'2026-01-17', 'next Friday') or a previous date from the context? "
-            "If yes, respond with only that date as written, nothing else. "
-            "If the request is only asking about the current date/time, "
-            "respond with exactly: NONE\n"
-            f"Previous context: {context}\n"
-            f"Request: {state['message']}"
-        )
-        extracted_date = self.llm.invoke(extraction_prompt).content.strip()
-
-        if extracted_date.upper() == "NONE":
-            current = self.datetime_tool.get_current_datetime()
-            response_content = f"The current date and time is {current}."
-        else:
-            day_of_week = self.datetime_tool.get_day_of_week(extracted_date)
-            response_content = f"{extracted_date} falls on a {day_of_week}."
-        
-        # Add to messages
-        if "messages" in state:
-            state["messages"].append({
-                "role": "assistant",
-                "content": response_content,
-                "timestamp": self.datetime_tool.get_current_datetime()
+                "timestamp": DateTimeTool.get_current_datetime()
             })
         
         return {"response": response_content, "messages": state.get("messages", [])}
