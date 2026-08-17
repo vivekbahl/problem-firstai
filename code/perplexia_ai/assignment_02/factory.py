@@ -8,6 +8,7 @@ from perplexia_ai.assignment_02.part1 import QueryUnderstandingChat
 from perplexia_ai.assignment_02.part1LangGraph import QueryUnderstandingLangGraphChat
 from perplexia_ai.assignment_02.part2 import BasicToolsChat
 from perplexia_ai.assignment_02.part2memory import BasicToolsMemoryChat
+from perplexia_ai.assignment_02.part2memguardrails import BasicToolsMemoryGuardrailsChat
 from perplexia_ai.assignment_02.part3 import MemoryChat
 
 class Assignment02Mode(Enum):
@@ -16,7 +17,9 @@ class Assignment02Mode(Enum):
     PART1_LANG_GRAPH = "part1LangGraph"  # Query understanding with language graph
     PART2_BASIC_TOOLS = "part2"
     PART2_BASIC_TOOLS_MEMORY = "part2memory"         # Adding calculator functionality
+
     PART3_MEMORY = "part3"              # Adding conversation memory
+    PART2_BASIC_TOOLS_MEMORY_GUARDRAILS = "part2memguardrails"  # Adding guardrails
 
 def create_chat_implementation(mode: Assignment02Mode) -> ChatInterface:
     """Create and return the appropriate chat implementation.
@@ -35,7 +38,8 @@ def create_chat_implementation(mode: Assignment02Mode) -> ChatInterface:
         Assignment02Mode.PART1_LANG_GRAPH: QueryUnderstandingLangGraphChat,
         Assignment02Mode.PART2_BASIC_TOOLS: BasicToolsChat,
         Assignment02Mode.PART2_BASIC_TOOLS_MEMORY: BasicToolsMemoryChat,
-        Assignment02Mode.PART3_MEMORY: MemoryChat
+        Assignment02Mode.PART3_MEMORY: MemoryChat,
+        Assignment02Mode.PART2_BASIC_TOOLS_MEMORY_GUARDRAILS: BasicToolsMemoryGuardrailsChat
     }
     
     if mode not in implementations:

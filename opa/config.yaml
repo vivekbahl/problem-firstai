@@ -1,0 +1,21 @@
+# opa-config.yaml
+
+# 1. Configures the internal HTTP listener parameters
+services:
+  local_gateway:
+    url: http://localhost:8181
+
+# 2. Controls logging parameters for historical security compliance audits
+decision_logs:
+  console: true # Dumps all evaluation requests/decisions into stdout for debugging
+
+# 3. Restricts OPA execution behaviors
+keys:
+  secret_token:
+    key: "your-super-secure-shared-api-key" # Secure calls from your application
+
+# 4. Exposes performance telemetry data
+plugins:
+  prometheus:
+    addr: :9100 # Allows tracking valuation latency spikes under heavy LLM loads
+

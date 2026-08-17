@@ -27,7 +27,7 @@ parser = argparse.ArgumentParser(description='Run Perplexia AI Assistant')
 parser.add_argument('--assignment', type=int, choices=available_assignments,
                     default=available_assignments[0],
                     help='Which packaged assignment to run')
-parser.add_argument('--mode', type=str, choices=['part1', 'part1LangGraph', 'part2', 'part2memory', 'part3'],
+parser.add_argument('--mode', type=str, choices=['part1', 'part1LangGraph', 'part2', 'part2memory', 'part2memguardrails', 'part3'],
                     default='part1', help='Which part of the selected assignment to run')
 parser.add_argument('--solution', '--solutions', dest='solution', action='store_true',
                     help='Run solution code instead of student code')
@@ -38,5 +38,5 @@ from perplexia_ai.app import APP_THEME, create_demo
 
 if __name__ == "__main__":
     demo = create_demo(assignment=args.assignment, mode_str=args.mode, use_solution=args.solution)
-    #demo.launch(theme=APP_THEME)
-    demo.launch(theme=APP_THEME, server_name="0.0.0.0", server_port=8000)
+    demo.launch(theme=APP_THEME)
+    #demo.launch(theme=APP_THEME, server_name="0.0.0.0", server_port=8000)
